@@ -1,0 +1,937 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>PNG — RFP Pipeline</title>
+<link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800;900&family=JetBrains+Mono:wght@300;400;500&display=swap" rel="stylesheet">
+<style>
+:root {
+  --bg: #04060d;
+  --surface: #090d1a;
+  --surface2: #0e1525;
+  --glass: rgba(255,255,255,0.03);
+  --glass-border: rgba(255,255,255,0.07);
+  --glass-hover: rgba(255,255,255,0.055);
+  --text: #f0f4ff;
+  --muted: #3d4d6e;
+  --muted2: #6b7aa1;
+  --accent: #4f7dff;
+  --accent2: #00d4ff;
+  --review: #f5a623;
+  --inprogress: #4f7dff;
+  --sent: #a855f7;
+  --won: #00d48c;
+  --lost: #ff4f6d;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { background: var(--bg); color: var(--text); font-family: 'Outfit', sans-serif; min-height: 100vh; overflow-x: hidden; }
+
+/* BG */
+.bg-canvas { position: fixed; inset: 0; z-index: 0; pointer-events: none; overflow: hidden; }
+.orb { position: absolute; border-radius: 50%; filter: blur(130px); opacity: 0.14; animation: drift 22s ease-in-out infinite alternate; }
+.orb1 { width: 700px; height: 700px; background: #4f7dff; top: -250px; left: -150px; animation-duration: 18s; }
+.orb2 { width: 500px; height: 500px; background: #a855f7; top: 40%; right: -150px; animation-duration: 26s; animation-delay: -9s; }
+.orb3 { width: 450px; height: 450px; background: #00d48c; bottom: -100px; left: 35%; animation-duration: 22s; animation-delay: -5s; }
+@keyframes drift { from { transform: translate(0,0) scale(1); } to { transform: translate(40px,30px) scale(1.1); } }
+.grid-bg { position: fixed; inset: 0; background-image: linear-gradient(rgba(79,125,255,0.025) 1px,transparent 1px),linear-gradient(90deg,rgba(79,125,255,0.025) 1px,transparent 1px); background-size: 48px 48px; z-index: 0; pointer-events: none; }
+
+.app { position: relative; z-index: 1; }
+
+/* VIEWS */
+.view { display: none; }
+.view.active { display: block; }
+
+/* ─── HEADER ─── */
+header {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 0 32px; height: 62px;
+  border-bottom: 1px solid var(--glass-border);
+  background: rgba(4,6,13,0.85); backdrop-filter: blur(24px);
+  position: sticky; top: 0; z-index: 300;
+}
+.logo {
+  font-size: 20px; font-weight: 900; letter-spacing: -0.5px;
+  background: linear-gradient(135deg, #fff 0%, #7aa5ff 100%);
+  -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+}
+.logo-sub { font-size: 11px; color: var(--muted2); font-weight: 500; letter-spacing: 0.3px; margin-top: 1px; }
+.header-center { display: flex; align-items: center; gap: 4px; }
+.nav-tab {
+  padding: 7px 16px; border-radius: 8px; font-size: 13px; font-weight: 600;
+  color: var(--muted2); cursor: pointer; border: 1px solid transparent;
+  transition: all 0.2s; background: none;
+}
+.nav-tab:hover { color: var(--text); background: var(--glass); }
+.nav-tab.active { color: var(--text); background: var(--glass); border-color: var(--glass-border); }
+.header-right { display: flex; align-items: center; gap: 10px; }
+.saved-tag { font-family: 'JetBrains Mono', monospace; font-size: 10px; color: var(--muted); transition: color 0.4s; }
+.btn-primary {
+  display: flex; align-items: center; gap: 7px;
+  background: var(--accent); color: #fff; border: none;
+  padding: 9px 18px; border-radius: 8px; font-family: 'Outfit', sans-serif;
+  font-weight: 700; font-size: 13px; cursor: pointer;
+  box-shadow: 0 0 24px rgba(79,125,255,0.35); transition: all 0.2s;
+}
+.btn-primary:hover { background: #3d6bf0; box-shadow: 0 0 36px rgba(79,125,255,0.55); transform: translateY(-1px); }
+
+/* ─── STATS BAR ─── */
+.stats-bar {
+  display: grid; grid-template-columns: repeat(6,1fr);
+  border-bottom: 1px solid var(--glass-border);
+  background: rgba(4,6,13,0.7); backdrop-filter: blur(12px);
+}
+.stat-card {
+  padding: 18px 24px; cursor: pointer; position: relative;
+  border-right: 1px solid var(--glass-border); overflow: hidden; transition: background 0.2s;
+}
+.stat-card:last-child { border-right: none; }
+.stat-card::after { content: ''; position: absolute; bottom: 0; left: 0; right: 0; height: 2px; transform: scaleX(0); transition: transform 0.25s; border-radius: 2px 2px 0 0; }
+.stat-card:hover { background: var(--glass-hover); }
+.stat-card.active { background: var(--glass); }
+.stat-card.active::after { transform: scaleX(1); }
+.stat-card[data-filter="all"]::after               { background: rgba(255,255,255,0.5); }
+.stat-card[data-filter="RFP Review"]::after         { background: var(--review); }
+.stat-card[data-filter="Proposal In Progress"]::after { background: var(--inprogress); }
+.stat-card[data-filter="Proposal Sent"]::after      { background: var(--sent); }
+.stat-card[data-filter="Won / Awarded"]::after       { background: var(--won); }
+.stat-card[data-filter="Lost / Declined"]::after     { background: var(--lost); }
+.stat-num { font-size: 30px; font-weight: 800; line-height: 1; margin-bottom: 4px; }
+.stat-card[data-filter="all"] .stat-num               { color: #fff; }
+.stat-card[data-filter="RFP Review"] .stat-num         { color: var(--review); }
+.stat-card[data-filter="Proposal In Progress"] .stat-num { color: var(--inprogress); }
+.stat-card[data-filter="Proposal Sent"] .stat-num      { color: var(--sent); }
+.stat-card[data-filter="Won / Awarded"] .stat-num       { color: var(--won); }
+.stat-card[data-filter="Lost / Declined"] .stat-num     { color: var(--lost); }
+.stat-lbl { font-size: 10px; font-weight: 600; color: var(--muted2); letter-spacing: 1px; text-transform: uppercase; }
+
+/* ─── TOOLBAR ─── */
+.toolbar {
+  display: flex; gap: 10px; padding: 14px 32px;
+  border-bottom: 1px solid var(--glass-border);
+  background: rgba(4,6,13,0.5); backdrop-filter: blur(8px);
+}
+.search-wrap { flex: 1; position: relative; }
+.search-icon { position: absolute; left: 13px; top: 50%; transform: translateY(-50%); color: var(--muted); font-size: 15px; pointer-events: none; }
+.search-input {
+  width: 100%; background: var(--glass); border: 1px solid var(--glass-border);
+  border-radius: 8px; padding: 9px 14px 9px 38px; color: var(--text);
+  font-family: 'Outfit', sans-serif; font-size: 13px; outline: none; transition: all 0.2s;
+}
+.search-input:focus { border-color: rgba(79,125,255,0.4); background: rgba(79,125,255,0.05); box-shadow: 0 0 0 3px rgba(79,125,255,0.07); }
+.search-input::placeholder { color: var(--muted); }
+.tb-select {
+  background: var(--glass); border: 1px solid var(--glass-border); border-radius: 8px;
+  padding: 9px 34px 9px 13px; color: var(--text); font-family: 'Outfit', sans-serif;
+  font-size: 13px; outline: none; cursor: pointer; appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='11' height='11' viewBox='0 0 24 24' fill='none' stroke='%234a5578' stroke-width='2'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+  background-repeat: no-repeat; background-position: right 11px center; transition: border 0.2s;
+}
+.tb-select:focus { border-color: rgba(79,125,255,0.4); }
+
+/* ─── LIST VIEW ─── */
+.main { padding: 20px 32px; display: flex; flex-direction: column; gap: 8px; }
+
+/* PROJECT CARD */
+.project-card {
+  background: var(--glass); border: 1px solid var(--glass-border);
+  border-radius: 12px; overflow: hidden; transition: all 0.22s;
+  animation: slideIn 0.3s ease both; position: relative;
+}
+.project-card::before {
+  content: ''; position: absolute; top: 0; left: 0; width: 3px; height: 100%;
+  border-radius: 12px 0 0 12px; opacity: 0.85;
+}
+.project-card.s-review::before   { background: var(--review); }
+.project-card.s-inprogress::before { background: var(--inprogress); }
+.project-card.s-sent::before     { background: var(--sent); }
+.project-card.s-won::before      { background: var(--won); box-shadow: 0 0 14px rgba(0,212,140,0.4); }
+.project-card.s-lost::before     { background: var(--lost); }
+@keyframes slideIn { from { opacity:0; transform:translateY(8px); } to { opacity:1; transform:translateY(0); } }
+.project-card:hover { background: var(--glass-hover); border-color: rgba(255,255,255,0.1); box-shadow: 0 8px 40px rgba(0,0,0,0.35); transform: translateY(-1px); }
+
+/* CARD HEADER ROW */
+.card-header { display: flex; align-items: center; gap: 14px; padding: 15px 18px 15px 22px; cursor: pointer; user-select: none; }
+.card-left { flex: 1; min-width: 0; }
+.card-title { font-size: 14px; font-weight: 700; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-bottom: 3px; }
+.card-sub { font-size: 11px; color: var(--muted2); display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.dot { width: 3px; height: 3px; border-radius: 50%; background: var(--muted); flex-shrink: 0; }
+.card-meta { display: flex; align-items: center; gap: 10px; flex-shrink: 0; }
+.meta-pill { display: flex; flex-direction: column; align-items: flex-end; }
+.meta-pill-lbl { font-size: 9px; font-weight: 700; text-transform: uppercase; letter-spacing: 1px; color: var(--muted); margin-bottom: 2px; }
+.meta-pill-val { font-size: 13px; font-weight: 600; color: var(--text); }
+
+/* BADGES */
+.badge { padding: 4px 10px; border-radius: 6px; font-size: 10px; font-weight: 700; letter-spacing: 0.5px; text-transform: uppercase; white-space: nowrap; }
+.b-review    { background: rgba(245,166,35,0.1);   color: var(--review);    border: 1px solid rgba(245,166,35,0.22); }
+.b-inprogress{ background: rgba(79,125,255,0.1);   color: var(--inprogress);border: 1px solid rgba(79,125,255,0.22); }
+.b-sent      { background: rgba(168,85,247,0.1);   color: var(--sent);      border: 1px solid rgba(168,85,247,0.22); }
+.b-won       { background: rgba(0,212,140,0.1);    color: var(--won);       border: 1px solid rgba(0,212,140,0.22); }
+.b-lost      { background: rgba(255,79,109,0.1);   color: var(--lost);      border: 1px solid rgba(255,79,109,0.22); }
+
+/* priority bars */
+.pri { display: flex; flex-direction: column; gap: 2px; padding: 4px; }
+.pri-bar { width: 16px; height: 3px; border-radius: 2px; background: rgba(255,255,255,0.07); }
+.pri-bar.lit { background: currentColor; }
+.pri-high { color: var(--lost); }
+.pri-med  { color: var(--review); }
+.pri-low  { color: var(--won); }
+
+/* chevron */
+.chev { width: 26px; height: 26px; display: flex; align-items: center; justify-content: center; border-radius: 6px; color: var(--muted); font-size: 10px; transition: all 0.2s; flex-shrink: 0; }
+.chev.open { color: var(--accent); transform: rotate(90deg); }
+
+/* CARD BODY */
+.card-body { display: none; border-top: 1px solid var(--glass-border); }
+.card-body.open { display: block; }
+
+/* TABS inside card */
+.card-tabs { display: flex; gap: 0; border-bottom: 1px solid var(--glass-border); background: rgba(0,0,0,0.15); }
+.card-tab {
+  padding: 10px 18px; font-size: 12px; font-weight: 600; color: var(--muted2);
+  cursor: pointer; border-bottom: 2px solid transparent; transition: all 0.18s; user-select: none;
+}
+.card-tab:hover { color: var(--text); }
+.card-tab.active { color: var(--text); border-bottom-color: var(--accent); }
+
+.card-tab-content { display: none; padding: 18px 22px; }
+.card-tab-content.active { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; }
+.card-tab-content.docs-active { display: block; padding: 18px 22px; }
+
+.detail-lbl { font-size: 9px; font-weight: 700; letter-spacing: 2px; text-transform: uppercase; color: var(--muted); margin-bottom: 8px; }
+.detail-val { font-size: 13px; color: var(--muted2); line-height: 1.75; }
+.detail-val strong { color: var(--text); font-weight: 600; }
+.detail-block.full { grid-column: 1/-1; }
+
+.notes-box {
+  background: rgba(79,125,255,0.04); border: 1px solid rgba(79,125,255,0.1);
+  border-radius: 8px; padding: 14px 16px; font-size: 12px; color: var(--muted2);
+  line-height: 1.75; font-family: 'JetBrains Mono', monospace; white-space: pre-wrap;
+}
+
+/* DOCS GRID */
+.docs-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 10px; }
+.doc-item {
+  display: flex; align-items: center; gap: 12px;
+  background: rgba(255,255,255,0.025); border: 1px solid var(--glass-border);
+  border-radius: 9px; padding: 12px 14px; text-decoration: none;
+  transition: all 0.18s; cursor: pointer;
+}
+.doc-item:hover { background: rgba(79,125,255,0.08); border-color: rgba(79,125,255,0.3); transform: translateY(-1px); box-shadow: 0 4px 20px rgba(0,0,0,0.3); }
+.doc-icon { font-size: 22px; flex-shrink: 0; }
+.doc-info { flex: 1; min-width: 0; }
+.doc-name { font-size: 12px; font-weight: 600; color: var(--text); margin-bottom: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.doc-size { font-size: 10px; color: var(--muted2); }
+.doc-dl { font-size: 14px; color: var(--muted); flex-shrink: 0; }
+.doc-item:hover .doc-dl { color: var(--accent); }
+
+/* CARD ACTIONS BAR */
+.card-actions {
+  display: flex; align-items: center; gap: 8px;
+  padding: 12px 22px; border-top: 1px solid var(--glass-border);
+  background: rgba(0,0,0,0.2);
+}
+.status-inline {
+  flex: 1; background: var(--glass); border: 1px solid var(--glass-border);
+  border-radius: 7px; padding: 7px 12px; color: var(--text);
+  font-family: 'Outfit', sans-serif; font-size: 12px; font-weight: 500; outline: none; cursor: pointer;
+}
+.act-btn {
+  padding: 7px 15px; border-radius: 7px; font-family: 'Outfit', sans-serif;
+  font-weight: 600; font-size: 12px; cursor: pointer; border: none; transition: all 0.15s;
+}
+.act-edit { background: var(--glass); color: var(--muted2); border: 1px solid var(--glass-border); }
+.act-edit:hover { color: var(--accent); border-color: rgba(79,125,255,0.3); background: rgba(79,125,255,0.08); }
+.act-del { background: transparent; color: rgba(255,79,109,0.55); border: 1px solid rgba(255,79,109,0.12); }
+.act-del:hover { background: rgba(255,79,109,0.08); color: var(--lost); border-color: rgba(255,79,109,0.3); }
+
+/* ─── KANBAN VIEW ─── */
+.kanban-wrap { padding: 20px 24px; overflow-x: auto; }
+.kanban-board { display: flex; gap: 14px; min-width: max-content; align-items: flex-start; }
+.kanban-col { width: 300px; flex-shrink: 0; }
+.kanban-header {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 12px 14px; border-radius: 10px 10px 0 0;
+  background: var(--surface2); border: 1px solid var(--glass-border); border-bottom: none;
+}
+.kanban-title { font-size: 11px; font-weight: 700; letter-spacing: 1px; text-transform: uppercase; }
+.kanban-count { font-size: 11px; font-weight: 700; background: var(--glass); border: 1px solid var(--glass-border); border-radius: 12px; padding: 1px 8px; color: var(--muted2); }
+.kanban-body { background: var(--surface); border: 1px solid var(--glass-border); border-radius: 0 0 10px 10px; min-height: 120px; padding: 10px; display: flex; flex-direction: column; gap: 8px; }
+.kanban-card {
+  background: var(--surface2); border: 1px solid var(--glass-border); border-radius: 8px;
+  padding: 12px 14px; cursor: pointer; transition: all 0.18s; position: relative; overflow: hidden;
+}
+.kanban-card::before { content:''; position:absolute; top:0;left:0;right:0;height:2px; }
+.kanban-card.s-review::before   { background: var(--review); }
+.kanban-card.s-inprogress::before { background: var(--inprogress); }
+.kanban-card.s-sent::before     { background: var(--sent); }
+.kanban-card.s-won::before      { background: var(--won); }
+.kanban-card.s-lost::before     { background: var(--lost); }
+.kanban-card:hover { border-color: rgba(255,255,255,0.12); box-shadow: 0 4px 20px rgba(0,0,0,0.4); transform: translateY(-1px); }
+.kc-title { font-size: 12px; font-weight: 700; color: var(--text); margin-bottom: 4px; line-height: 1.4; }
+.kc-client { font-size: 11px; color: var(--muted2); margin-bottom: 8px; }
+.kc-footer { display: flex; align-items: center; justify-content: space-between; }
+.kc-budget { font-size: 11px; font-weight: 600; color: var(--text); font-variant-numeric: tabular-nums; }
+.kc-deadline { font-size: 10px; color: var(--muted2); }
+.kanban-empty { font-size: 12px; color: var(--muted); text-align: center; padding: 20px; }
+
+/* ─── EMPTY STATES ─── */
+.empty-state { display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 80px 20px; text-align: center; color: var(--muted); }
+.empty-icon { font-size: 52px; margin-bottom: 14px; opacity: 0.45; }
+.empty-state p { font-size: 14px; line-height: 1.6; }
+
+/* ─── MODAL ─── */
+.overlay { display: none; position: fixed; inset: 0; background: rgba(4,6,13,0.88); backdrop-filter: blur(14px); z-index: 1000; align-items: center; justify-content: center; padding: 20px; }
+.overlay.open { display: flex; }
+.modal { background: #090d1a; border: 1px solid var(--glass-border); border-radius: 16px; width: 100%; max-width: 700px; max-height: 90vh; overflow-y: auto; box-shadow: 0 40px 100px rgba(0,0,0,0.7), 0 0 0 1px rgba(79,125,255,0.08); animation: modalPop 0.2s ease; }
+@keyframes modalPop { from { opacity:0; transform:scale(0.95) translateY(12px); } to { opacity:1; transform:scale(1) translateY(0); } }
+.modal-header { display: flex; align-items: center; justify-content: space-between; padding: 22px 26px 18px; border-bottom: 1px solid var(--glass-border); }
+.modal-title { font-size: 17px; font-weight: 800; background: linear-gradient(135deg,#fff,#a0b4ff); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
+.modal-close { background: var(--glass); border: 1px solid var(--glass-border); color: var(--muted2); width: 30px; height: 30px; border-radius: 7px; cursor: pointer; font-size: 13px; display: flex; align-items: center; justify-content: center; transition: all 0.15s; }
+.modal-close:hover { color: var(--text); }
+.modal-body { padding: 22px 26px; display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+.form-group { display: flex; flex-direction: column; gap: 6px; }
+.form-group.full { grid-column: 1/-1; }
+.form-label { font-size: 10px; font-weight: 700; letter-spacing: 1.5px; text-transform: uppercase; color: var(--muted2); }
+.form-input, .form-select, .form-textarea {
+  background: rgba(255,255,255,0.03); border: 1px solid var(--glass-border); border-radius: 8px;
+  padding: 9px 12px; color: var(--text); font-family: 'Outfit', sans-serif; font-size: 13px;
+  outline: none; width: 100%; transition: all 0.2s;
+}
+.form-input:focus,.form-select:focus,.form-textarea:focus { border-color: rgba(79,125,255,0.45); background: rgba(79,125,255,0.05); box-shadow: 0 0 0 3px rgba(79,125,255,0.07); }
+.form-input::placeholder { color: var(--muted); }
+.form-textarea { resize: vertical; min-height: 80px; line-height: 1.6; }
+.modal-footer { display: flex; justify-content: flex-end; gap: 10px; padding: 14px 26px 22px; border-top: 1px solid var(--glass-border); }
+.btn-cancel { background: var(--glass); color: var(--muted2); border: 1px solid var(--glass-border); padding: 9px 18px; border-radius: 8px; font-family: 'Outfit', sans-serif; font-weight: 600; font-size: 13px; cursor: pointer; transition: all 0.15s; }
+.btn-cancel:hover { color: var(--text); }
+.btn-save { background: var(--accent); color: #fff; border: none; padding: 9px 22px; border-radius: 8px; font-family: 'Outfit', sans-serif; font-weight: 700; font-size: 13px; cursor: pointer; box-shadow: 0 0 22px rgba(79,125,255,0.35); transition: all 0.2s; }
+.btn-save:hover { background: #3d6bf0; }
+
+
+/* ── APPROVAL BADGE ── */
+.approval-bar {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 10px 22px; border-top: 1px solid var(--glass-border);
+  background: rgba(0,0,0,0.15);
+}
+.approval-check {
+  display: flex; align-items: center; gap: 10px; cursor: pointer; user-select: none;
+}
+.approval-check input[type=checkbox] { display: none; }
+.check-box {
+  width: 20px; height: 20px; border-radius: 5px; border: 2px solid var(--muted);
+  display: flex; align-items: center; justify-content: center;
+  transition: all 0.2s; flex-shrink: 0; font-size: 11px;
+}
+.approval-check.approved .check-box { background: var(--won); border-color: var(--won); box-shadow: 0 0 10px rgba(0,212,140,0.4); }
+.approval-check.approved .check-box::after { content: '✓'; color: #fff; font-weight: 700; }
+.approval-check.rejected .check-box { background: var(--lost); border-color: var(--lost); box-shadow: 0 0 10px rgba(255,79,109,0.3); }
+.approval-check.rejected .check-box::after { content: '✕'; color: #fff; font-weight: 700; }
+.approval-label { font-size: 12px; font-weight: 600; color: var(--muted2); transition: color 0.2s; }
+.approval-check.approved .approval-label { color: var(--won); }
+.approval-check.rejected .approval-label { color: var(--lost); }
+.approval-stamp {
+  font-size: 10px; font-weight: 700; letter-spacing: 1px; text-transform: uppercase;
+  padding: 4px 10px; border-radius: 5px;
+}
+.stamp-pending  { color: var(--muted2); background: rgba(255,255,255,0.03); border: 1px solid var(--glass-border); }
+.stamp-approved { color: var(--won);    background: rgba(0,212,140,0.08);   border: 1px solid rgba(0,212,140,0.2); }
+.stamp-rejected { color: var(--lost);   background: rgba(255,79,109,0.08);  border: 1px solid rgba(255,79,109,0.2); }
+
+/* scrollbar */
+::-webkit-scrollbar { width: 5px; height: 5px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.08); border-radius: 3px; }
+</style>
+</head>
+<body>
+<div class="bg-canvas">
+  <div class="orb orb1"></div><div class="orb orb2"></div><div class="orb orb3"></div>
+</div>
+<div class="grid-bg"></div>
+
+<div class="app">
+
+<!-- HEADER -->
+<header>
+  <div>
+    <div class="logo">PNG</div>
+    <div class="logo-sub">RFP Pipeline Tracker</div>
+  </div>
+  <div class="header-center">
+    <button class="nav-tab active" onclick="switchView('list', this)">☰ List</button>
+    <button class="nav-tab" onclick="switchView('kanban', this)">⊞ Kanban</button>
+  </div>
+  <div class="header-right">
+    <span class="saved-tag" id="savedTag"></span>
+    <button class="btn-primary" onclick="openModal()"><span style="font-size:15px">+</span> New RFP</button>
+  </div>
+</header>
+
+<!-- STATS BAR -->
+<div class="stats-bar">
+  <div class="stat-card active" data-filter="all" onclick="setFilter('all',this)">
+    <div class="stat-num" id="stat-all">0</div><div class="stat-lbl">All</div>
+  </div>
+  <div class="stat-card" data-filter="RFP Review" onclick="setFilter('RFP Review',this)">
+    <div class="stat-num" id="stat-review">0</div><div class="stat-lbl">RFP Review</div>
+  </div>
+  <div class="stat-card" data-filter="Proposal In Progress" onclick="setFilter('Proposal In Progress',this)">
+    <div class="stat-num" id="stat-inprogress">0</div><div class="stat-lbl">In Progress</div>
+  </div>
+  <div class="stat-card" data-filter="Proposal Sent" onclick="setFilter('Proposal Sent',this)">
+    <div class="stat-num" id="stat-sent">0</div><div class="stat-lbl">Proposal Sent</div>
+  </div>
+  <div class="stat-card" data-filter="Won / Awarded" onclick="setFilter('Won / Awarded',this)">
+    <div class="stat-num" id="stat-won">0</div><div class="stat-lbl">Won</div>
+  </div>
+  <div class="stat-card" data-filter="Lost / Declined" onclick="setFilter('Lost / Declined',this)">
+    <div class="stat-num" id="stat-lost">0</div><div class="stat-lbl">Lost</div>
+  </div>
+</div>
+
+<!-- TOOLBAR -->
+<div class="toolbar">
+  <div class="search-wrap">
+    <span class="search-icon">⌕</span>
+    <input class="search-input" id="searchInput" type="text" placeholder="Search projects, clients, teams..." oninput="render()">
+  </div>
+  <select class="tb-select" id="teamFilter" onchange="render()">
+    <option value="">All Teams</option>
+    <option>Large Data</option><option>Software Dev</option><option>AI / ML</option>
+    <option>Cloud Infra</option><option>Integration</option><option>Custom</option>
+  </select>
+  <select class="tb-select" id="sortBy" onchange="render()">
+    <option value="date-desc">Newest First</option>
+    <option value="date-asc">Oldest First</option>
+    <option value="budget-desc">Budget ↓</option>
+    <option value="budget-asc">Budget ↑</option>
+    <option value="deadline">Deadline</option>
+  </select>
+</div>
+
+<!-- LIST VIEW -->
+<div class="view active" id="view-list">
+  <div class="main" id="projectGrid"></div>
+</div>
+
+<!-- KANBAN VIEW -->
+<div class="view" id="view-kanban">
+  <div class="kanban-wrap">
+    <div class="kanban-board" id="kanbanBoard"></div>
+  </div>
+</div>
+
+</div><!-- /app -->
+
+<!-- MODAL -->
+<div class="overlay" id="modalOverlay">
+  <div class="modal">
+    <div class="modal-header">
+      <div class="modal-title" id="modalTitle">New RFP Project</div>
+      <button class="modal-close" onclick="closeModal()">✕</button>
+    </div>
+    <div class="modal-body">
+      <div class="form-group"><label class="form-label">Project Name *</label><input class="form-input" id="f-name" placeholder="e.g. City Data Platform"></div>
+      <div class="form-group"><label class="form-label">Client / Organization *</label><input class="form-input" id="f-client" placeholder="e.g. City of Toronto"></div>
+      <div class="form-group"><label class="form-label">Status</label>
+        <select class="form-select" id="f-status">
+          <option>RFP Review</option><option>Proposal In Progress</option>
+          <option>Proposal Sent</option><option>Won / Awarded</option><option>Lost / Declined</option>
+        </select>
+      </div>
+      <div class="form-group"><label class="form-label">Tech Team</label>
+        <select class="form-select" id="f-team">
+          <option value="">— Unassigned —</option>
+          <option>Large Data</option><option>Software Dev</option><option>AI / ML</option>
+          <option>Cloud Infra</option><option>Integration</option><option>Custom</option>
+        </select>
+      </div>
+      <div class="form-group"><label class="form-label">Budget (CAD)</label><input class="form-input" id="f-budget" type="number" placeholder="e.g. 250000"></div>
+      <div class="form-group"><label class="form-label">Submission Deadline</label><input class="form-input" id="f-deadline" type="date"></div>
+      <div class="form-group"><label class="form-label">RFP Issue Date</label><input class="form-input" id="f-issueDate" type="date"></div>
+      <div class="form-group"><label class="form-label">Priority</label>
+        <select class="form-select" id="f-priority"><option>High</option><option selected>Medium</option><option>Low</option></select>
+      </div>
+      <div class="form-group"><label class="form-label">Delivery Model</label>
+        <select class="form-select" id="f-delivery">
+          <option value="">— Not Set —</option>
+          <option>Product Sale / SaaS License</option><option>Custom Software Development</option>
+          <option>Large Data / Analytics</option><option>Managed Services</option>
+          <option>Integration / Implementation</option><option>Consulting / Advisory</option>
+          <option>Hybrid (Product + Services)</option>
+        </select>
+      </div>
+      <div class="form-group"><label class="form-label">Contract Term</label><input class="form-input" id="f-term" placeholder="e.g. 5 years + 5 yr option"></div>
+      <div class="form-group full"><label class="form-label">Folder / Document Link</label><input class="form-input" id="f-link" placeholder="SharePoint URL, network path, etc."></div>
+      <div class="form-group full"><label class="form-label">Requirements Summary</label><textarea class="form-textarea" id="f-requirements" placeholder="What is the client asking for?"></textarea></div>
+      <div class="form-group full"><label class="form-label">Notes / Tech Lead Comments</label><textarea class="form-textarea" id="f-notes" placeholder="Internal notes, risks, action items..."></textarea></div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn-cancel" onclick="closeModal()">Cancel</button>
+      <button class="btn-save" onclick="saveProject()">Save Project</button>
+    </div>
+  </div>
+</div>
+
+<script>
+// ── DATA ──
+let projects = JSON.parse(localStorage.getItem('rfp_projects_png') || '[]');
+let currentFilter = 'all';
+let editingId = null;
+let currentView = 'list';
+
+const STATUSES = ['RFP Review','Proposal In Progress','Proposal Sent','Won / Awarded','Lost / Declined'];
+const SC = s => ({ 'RFP Review':'review','Proposal In Progress':'inprogress','Proposal Sent':'sent','Won / Awarded':'won','Lost / Declined':'lost' }[s]||'review');
+
+// Documents per RFP (keyed by project id or rfp code)
+// GitHub raw URLs — update YOUR_USERNAME and YOUR_REPO below
+const GITHUB_BASE = 'https://raw.githubusercontent.com/YOUR_USERNAME/YOUR_REPO/main/docs';
+
+const RFP_DOCS = {
+  'PRC005313': {
+    docs: [
+      { name: 'Pricing Schedule',                file: 'docs/PRC005313/00_Pricing_Schedule.pdf',               size: '492 KB' },
+      { name: 'Bidder Info Package',             file: 'docs/PRC005313/01_Bidder_Info_Pkg.pdf',                size: '586 KB' },
+      { name: 'Appendix A — NRFP Particulars',  file: 'docs/PRC005313/02_Appendix_A_NRFP_Particulars.pdf',   size: '324 KB' },
+      { name: 'Appendix B — IT Master Agreement',file: 'docs/PRC005313/03_Appendix_B_IT_MSA.pdf',             size: '615 KB' },
+      { name: 'Appendix C — SOW General',        file: 'docs/PRC005313/04_Appendix_C_SOW_General.pdf',        size: '232 KB' },
+      { name: 'Appendix C1 — IT SOW',            file: 'docs/PRC005313/05_Appendix_C1_IT_SOW.pdf',            size: '421 KB' },
+      { name: 'Appendix D — SLA',                file: 'docs/PRC005313/06_Appendix_D_SLA.pdf',                size: '305 KB' },
+    ],
+    addenda: []
+  },
+  'RFEOI25-466': {
+    docs: [
+      { name: 'RFEOI Document',                  file: 'docs/RFEOI25-466/Documents/01_RFEOI_Document.pdf',              size: '345 KB' },
+      { name: 'Appendix A — Terms of Reference', file: 'docs/RFEOI25-466/Documents/02_Appendix_A_Terms_of_Reference.pdf', size: '379 KB' },
+      { name: 'Submission Schedule',             file: 'docs/RFEOI25-466/Documents/03_Pricing_Schedule.pdf',            size: '250 KB' },
+    ],
+    addenda: [
+      { name: 'Addendum 1', file: 'docs/RFEOI25-466/Addenda/Addendum_1.pdf', size: '245 KB' },
+      { name: 'Addendum 2', file: 'docs/RFEOI25-466/Addenda/Addendum_2.pdf', size: '245 KB' },
+      { name: 'Addendum 3', file: 'docs/RFEOI25-466/Addenda/Addendum_3.pdf', size: '281 KB' },
+      { name: 'Addendum 4', file: 'docs/RFEOI25-466/Addenda/Addendum_4.pdf', size: '282 KB' },
+    ]
+  }
+};
+
+// ── HELPERS ──
+function save() {
+  localStorage.setItem('rfp_projects_png', JSON.stringify(projects));
+  const el = document.getElementById('savedTag');
+  el.textContent = 'Saved ' + new Date().toLocaleTimeString();
+  el.style.color = '#00d48c';
+  setTimeout(() => { el.style.color = ''; }, 2500);
+}
+
+function fmtBudget(n) {
+  if (!n) return 'TBD';
+  if (n >= 1000000) return '$' + (n/1000000).toFixed(1) + 'M';
+  if (n >= 1000) return '$' + Math.round(n/1000) + 'K';
+  return '$' + Number(n).toLocaleString('en-CA');
+}
+
+function fmtDate(d) {
+  if (!d) return '—';
+  const [y,m,day] = d.split('-');
+  return ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][+m-1] + ' ' + +day + ', ' + y;
+}
+
+function deadlineHtml(d) {
+  if (!d) return '<span style="color:var(--muted)">—</span>';
+  const days = Math.ceil((new Date(d) - new Date()) / 86400000);
+  if (days < 0)  return `<span style="color:var(--lost);font-weight:700">PAST DUE</span>`;
+  if (days === 0) return `<span style="color:var(--review);font-weight:700">TODAY</span>`;
+  if (days <= 7)  return `<span style="color:var(--review);font-weight:700">${days}d left</span>`;
+  return fmtDate(d);
+}
+
+function priBars(p) {
+  const lvl = {High:3,Medium:2,Low:1}[p||'Medium'];
+  const cls = {High:'pri-high',Medium:'pri-med',Low:'pri-low'}[p||'Medium'];
+  return `<div class="pri ${cls}">${[1,2,3].map(i=>`<div class="pri-bar${i<=lvl?' lit':''}"></div>`).join('')}</div>`;
+}
+
+function docsHtml(p) {
+  const code = p.rfpCode || '';
+  const entry = RFP_DOCS[code];
+  if (!entry) {
+    if (p.link) return `<p style="font-size:13px;color:var(--muted2)">External folder: <a href="${p.link}" target="_blank" style="color:var(--accent2)">${p.link}</a></p>`;
+    return `<p style="font-size:13px;color:var(--muted);text-align:center;padding:20px 0">No documents attached to this RFP yet.</p>`;
+  }
+  const docCard = d => `
+    <a class="doc-item" href="${d.file}" target="_blank">
+      <span class="doc-icon">📄</span>
+      <div class="doc-info">
+        <div class="doc-name">${d.name}</div>
+        <div class="doc-size">PDF · ${d.size}</div>
+      </div>
+      <span class="doc-dl">↓</span>
+    </a>`;
+  let html = `<div class="docs-grid">${entry.docs.map(docCard).join('')}</div>`;
+  if (entry.addenda && entry.addenda.length > 0) {
+    html += `<div style="margin-top:16px">
+      <div class="detail-lbl" style="margin-bottom:10px">Addenda (${entry.addenda.length})</div>
+      <div class="docs-grid">${entry.addenda.map(d => `
+        <a class="doc-item" href="${d.file}" target="_blank" style="border-color:rgba(168,85,247,0.2);background:rgba(168,85,247,0.04)">
+          <span class="doc-icon">📋</span>
+          <div class="doc-info">
+            <div class="doc-name">${d.name}</div>
+            <div class="doc-size">PDF · ${d.size}</div>
+          </div>
+          <span class="doc-dl" style="color:var(--sent)">↓</span>
+        </a>`).join('')}</div>
+    </div>`;
+  }
+  return html;
+}
+
+// ── FILTERING ──
+function getFiltered() {
+  const q = document.getElementById('searchInput').value.toLowerCase();
+  const team = document.getElementById('teamFilter').value;
+  const sort = document.getElementById('sortBy').value;
+  let list = projects.filter(p => {
+    const mf = currentFilter === 'all' || p.status === currentFilter;
+    const ms = !q || [p.name,p.client,p.team||'',p.requirements||''].some(x=>x.toLowerCase().includes(q));
+    const mt = !team || p.team === team;
+    return mf && ms && mt;
+  });
+  list.sort((a,b) => {
+    if (sort==='date-desc') return b.id-a.id;
+    if (sort==='date-asc') return a.id-b.id;
+    if (sort==='budget-desc') return (b.budget||0)-(a.budget||0);
+    if (sort==='budget-asc') return (a.budget||0)-(b.budget||0);
+    if (sort==='deadline') return (a.deadline||'9999')<(b.deadline||'9999')?-1:1;
+    return 0;
+  });
+  return list;
+}
+
+function updateStats() {
+  document.getElementById('stat-all').textContent = projects.length;
+  ['RFP Review','Proposal In Progress','Proposal Sent','Won / Awarded','Lost / Declined'].forEach((s,i) => {
+    const ids = ['review','inprogress','sent','won','lost'];
+    document.getElementById('stat-'+ids[i]).textContent = projects.filter(p=>p.status===s).length;
+  });
+}
+
+// ── VIEWS ──
+function switchView(v, el) {
+  currentView = v;
+  document.querySelectorAll('.view').forEach(x => x.classList.remove('active'));
+  document.querySelectorAll('.nav-tab').forEach(x => x.classList.remove('active'));
+  document.getElementById('view-'+v).classList.add('active');
+  el.classList.add('active');
+  render();
+}
+
+function setFilter(f, el) {
+  currentFilter = f;
+  document.querySelectorAll('.stat-card').forEach(c => c.classList.remove('active'));
+  el.classList.add('active');
+  render();
+}
+
+function render() { updateStats(); currentView === 'kanban' ? renderKanban() : renderList(); }
+
+// ── LIST RENDER ──
+function renderList() {
+  const grid = document.getElementById('projectGrid');
+  const list = getFiltered();
+  if (!list.length) {
+    grid.innerHTML = projects.length === 0
+      ? `<div class="empty-state"><div class="empty-icon">📋</div><p>No RFP projects yet.<br>Click <strong>+ New RFP</strong> to get started.</p></div>`
+      : `<div class="empty-state"><div class="empty-icon">🔍</div><p>No projects match your filters.</p></div>`;
+    return;
+  }
+  grid.innerHTML = list.map(p => {
+    const sc = SC(p.status);
+    return `
+    <div class="project-card s-${sc}" id="card-${p.id}">
+      <div class="card-header" onclick="toggleCard(${p.id})">
+        <div class="card-left">
+          <div class="card-title">${p.name}</div>
+          <div class="card-sub">
+            <span>${p.client}</span>
+            ${p.team?`<span class="dot"></span><span>${p.team}</span>`:''}
+            ${p.delivery?`<span class="dot"></span><span style="color:var(--muted)">${p.delivery}</span>`:''}
+          </div>
+        </div>
+        <div class="card-meta">
+          <div class="meta-pill">
+            <span class="meta-pill-lbl">Budget</span>
+            <span class="meta-pill-val">${fmtBudget(p.budget)}</span>
+          </div>
+          <div class="meta-pill">
+            <span class="meta-pill-lbl">Deadline</span>
+            <span class="meta-pill-val" style="font-size:12px">${deadlineHtml(p.deadline)}</span>
+          </div>
+          <span class="badge b-${sc}">${p.status}</span>
+          ${priBars(p.priority)}
+        </div>
+        <div class="chev" id="chev-${p.id}">▶</div>
+      </div>
+
+      <div class="card-body" id="body-${p.id}">
+        <div class="card-tabs">
+          <div class="card-tab active" id="tab-overview-${p.id}" onclick="switchCardTab(${p.id},'overview')">Overview</div>
+          <div class="card-tab" id="tab-docs-${p.id}" onclick="switchCardTab(${p.id},'docs')">
+            Documents ${RFP_DOCS[p.rfpCode||''] ? `<span style="background:var(--accent);color:#fff;border-radius:10px;padding:1px 6px;font-size:9px;margin-left:4px">${(RFP_DOCS[p.rfpCode||''].docs||[]).length + (RFP_DOCS[p.rfpCode||''].addenda||[]).length}</span>` : ''}
+          </div>
+          <div class="card-tab" id="tab-notes-${p.id}" onclick="switchCardTab(${p.id},'notes')">Notes</div>
+        </div>
+
+        <div class="card-tab-content active" id="tc-overview-${p.id}">
+          <div class="detail-block">
+            <div class="detail-lbl">Requirements</div>
+            <div class="detail-val">${p.requirements||'<span style="opacity:0.35">No summary added.</span>'}</div>
+          </div>
+          <div class="detail-block">
+            <div class="detail-lbl">Key Details</div>
+            <div class="detail-val">
+              <strong>Issue Date</strong> ${fmtDate(p.issueDate)}<br>
+              <strong>Deadline</strong> ${fmtDate(p.deadline)}<br>
+              <strong>Contract</strong> ${p.term||'—'}<br>
+              <strong>Delivery</strong> ${p.delivery||'Not set'}<br>
+              <strong>Team</strong> ${p.team||'Unassigned'}<br>
+              ${p.rfpCode?`<strong>RFP Ref</strong> ${p.rfpCode}`:''}
+            </div>
+          </div>
+        </div>
+
+        <div class="card-tab-content" id="tc-docs-${p.id}">
+          ${docsHtml(p)}
+        </div>
+
+        <div class="card-tab-content" id="tc-notes-${p.id}">
+          <div class="detail-block full" style="grid-column:1/-1">
+            ${p.notes ? `<div class="notes-box">${p.notes}</div>` : '<p style="color:var(--muted);font-size:13px">No notes added yet.</p>'}
+          </div>
+        </div>
+
+        <div class="approval-bar">
+          <label class="approval-check ${p.approval==='approved'?'approved':p.approval==='rejected'?'rejected':''}" onclick="cycleApproval(${p.id})">
+            <div class="check-box"></div>
+            <span class="approval-label">
+              ${p.approval==='approved' ? 'Tech Lead Approved — can proceed' : p.approval==='rejected' ? 'Tech Lead Declined — not viable' : 'Awaiting tech lead sign-off'}
+            </span>
+          </label>
+          <span class="approval-stamp ${p.approval==='approved'?'stamp-approved':p.approval==='rejected'?'stamp-rejected':'stamp-pending'}">
+            ${p.approval==='approved' ? '✓ GO' : p.approval==='rejected' ? '✕ NO GO' : '⏳ Pending'}
+          </span>
+        </div>
+        <div class="card-actions">
+          <select class="status-inline" onchange="quickStatus(${p.id},this.value)">
+            ${STATUSES.map(s=>`<option ${p.status===s?'selected':''}>${s}</option>`).join('')}
+          </select>
+          <button class="act-btn act-edit" onclick="editProject(${p.id})">✏ Edit</button>
+          <button class="act-btn act-del" onclick="deleteProject(${p.id})">✕</button>
+        </div>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function toggleCard(id) {
+  document.getElementById('body-'+id).classList.toggle('open');
+  document.getElementById('chev-'+id).classList.toggle('open');
+}
+
+function switchCardTab(id, tab) {
+  ['overview','docs','notes'].forEach(t => {
+    document.getElementById('tab-'+t+'-'+id).classList.toggle('active', t===tab);
+    const tc = document.getElementById('tc-'+t+'-'+id);
+    tc.classList.remove('active','docs-active');
+    if (t===tab) tc.classList.add(tab==='docs'?'docs-active':'active');
+  });
+}
+
+// ── KANBAN RENDER ──
+function renderKanban() {
+  const board = document.getElementById('kanbanBoard');
+  const statusColors = { 'RFP Review':'var(--review)','Proposal In Progress':'var(--inprogress)','Proposal Sent':'var(--sent)','Won / Awarded':'var(--won)','Lost / Declined':'var(--lost)' };
+  board.innerHTML = STATUSES.map(s => {
+    const cards = projects.filter(p => p.status === s);
+    return `
+    <div class="kanban-col">
+      <div class="kanban-header">
+        <span class="kanban-title" style="color:${statusColors[s]}">${s}</span>
+        <span class="kanban-count">${cards.length}</span>
+      </div>
+      <div class="kanban-body">
+        ${cards.length === 0 ? `<div class="kanban-empty">No projects</div>` :
+          cards.map(p => `
+          <div class="kanban-card s-${SC(p.status)}" onclick="openListAndExpand(${p.id})">
+            <div class="kc-title">${p.name}</div>
+            <div class="kc-client">${p.client}${p.team?` · ${p.team}`:''}</div>
+            <div class="kc-footer">
+              <span class="kc-budget">${fmtBudget(p.budget)}</span>
+              <span class="kc-deadline">${deadlineHtml(p.deadline)}</span>
+            </div>
+            ${p.approval ? `<div style="margin-top:8px;font-size:10px;font-weight:700;color:${p.approval==='approved'?'var(--won)':'var(--lost)'};">${p.approval==='approved'?'✓ GO':'✕ NO GO'}</div>` : ''}
+          </div>`).join('')}
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function openListAndExpand(id) {
+  switchView('list', document.querySelector('.nav-tab'));
+  setTimeout(() => {
+    const body = document.getElementById('body-'+id);
+    const chev = document.getElementById('chev-'+id);
+    if (body && !body.classList.contains('open')) {
+      body.classList.add('open');
+      chev.classList.add('open');
+      document.getElementById('card-'+id).scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+  }, 80);
+}
+
+// ── STATUS QUICK UPDATE ──
+function cycleApproval(id) {
+  const p = projects.find(x=>x.id===id); if(!p) return;
+  const cycle = {undefined:'approved', 'approved':'rejected', 'rejected':undefined};
+  p.approval = cycle[p.approval];
+  save(); render();
+}
+
+function quickStatus(id, val) {
+  const p = projects.find(x => x.id === id);
+  if (p) { p.status = val; save(); render(); }
+}
+
+// ── MODAL ──
+function openModal(reset=true) {
+  if (reset) {
+    editingId = null;
+    document.getElementById('modalTitle').textContent = 'New RFP Project';
+    ['name','client','budget','deadline','issueDate','term','link','requirements','notes','rfpCode'].forEach(f => {
+      const el = document.getElementById('f-'+f); if(el) el.value='';
+    });
+    document.getElementById('f-delivery').value='';
+    document.getElementById('f-status').value='RFP Review';
+    document.getElementById('f-team').value='';
+    document.getElementById('f-priority').value='Medium';
+  }
+  document.getElementById('modalOverlay').classList.add('open');
+}
+
+function closeModal() { document.getElementById('modalOverlay').classList.remove('open'); }
+
+function editProject(id) {
+  const p = projects.find(x=>x.id===id); if(!p) return;
+  editingId = id;
+  document.getElementById('modalTitle').textContent = 'Edit Project';
+  const fields = ['name','client','budget','deadline','issueDate','term','link','requirements','notes'];
+  fields.forEach(f => { const el=document.getElementById('f-'+f); if(el) el.value=p[f]||''; });
+  document.getElementById('f-status').value = p.status||'RFP Review';
+  document.getElementById('f-team').value = p.team||'';
+  document.getElementById('f-priority').value = p.priority||'Medium';
+  document.getElementById('f-delivery').value = p.delivery||'';
+  const rc = document.getElementById('f-rfpCode'); if(rc) rc.value = p.rfpCode||'';
+  openModal(false);
+}
+
+function saveProject() {
+  const name = document.getElementById('f-name').value.trim();
+  const client = document.getElementById('f-client').value.trim();
+  if (!name||!client) { alert('Project Name and Client are required.'); return; }
+  const data = {
+    name, client,
+    status: document.getElementById('f-status').value,
+    team: document.getElementById('f-team').value,
+    budget: parseFloat(document.getElementById('f-budget').value)||null,
+    deadline: document.getElementById('f-deadline').value,
+    issueDate: document.getElementById('f-issueDate').value,
+    priority: document.getElementById('f-priority').value,
+    delivery: document.getElementById('f-delivery').value,
+    term: document.getElementById('f-term').value.trim(),
+    link: document.getElementById('f-link').value.trim(),
+    requirements: document.getElementById('f-requirements').value.trim(),
+    notes: document.getElementById('f-notes').value.trim(),
+    rfpCode: (document.getElementById('f-rfpCode')||{value:''}).value.trim(),
+  };
+  if (editingId) {
+    const idx = projects.findIndex(x=>x.id===editingId);
+    if (idx>-1) projects[idx] = {...projects[idx],...data};
+  } else { data.id = Date.now(); projects.unshift(data); }
+  save(); closeModal(); render();
+}
+
+function deleteProject(id) {
+  if (!confirm('Remove this RFP project?')) return;
+  projects = projects.filter(x=>x.id!==id);
+  save(); render();
+}
+
+document.getElementById('modalOverlay').addEventListener('click', function(e){ if(e.target===this) closeModal(); });
+document.addEventListener('keydown', e => { if(e.key==='Escape') closeModal(); if(e.key==='n'&&!e.target.matches('input,textarea,select')) openModal(); });
+
+// Add RFP Code field dynamically to modal
+(function(){
+  const mb = document.querySelector('.modal-body');
+  const fg = document.createElement('div');
+  fg.className = 'form-group';
+  fg.innerHTML = '<label class="form-label">RFP Reference Code</label><input class="form-input" id="f-rfpCode" placeholder="e.g. PRC005313">';
+  // Insert after f-term group
+  const termGroup = document.getElementById('f-term').closest('.form-group');
+  termGroup.after(fg);
+})();
+
+// ── SEED DATA ──
+if (!localStorage.getItem('rfp_projects_png')) {
+  projects = [{
+    id: 1741000000000,
+    name: 'Online Submission Management Software',
+    client: 'City of Mississauga',
+    status: 'RFP Review',
+    team: 'Software Dev',
+    budget: null,
+    deadline: '2026-03-13',
+    issueDate: '2026-02-01',
+    priority: 'High',
+    delivery: 'Product Sale / SaaS License',
+    term: '5 years + 5 year optional extension',
+    rfpCode: 'PRC005313',
+    link: '',
+    requirements: 'Replace SurveyMonkey Apply across 4 business units: Grants (Community Development), Events (Celebration Square), Public Art, and Tourism Event Hosting. Needs application intake with multi-year support, review workflows, automated notifications, reporting, archiving, and configurable admin portals. Must support up to 2,000 applicants/site, 50 reviewers, 10 admins across 4 separate business unit URLs.',
+    notes: '⚠ PRODUCT SALE — fast-track a product for demo/submission. Not a services engagement.\n\nScoring: 65% technical / 35% price. Must score 70%+ technical for pricing to be opened.\n\nKey dates:\n• Questions deadline: Feb 27, 2026 (PASSED)\n• Submission deadline: Mar 13, 2026 @ 2:00 PM\n• Anticipated contract start: Jul 1, 2026\n\nProcurement ref: PRC005313\nContact: Christina Barszczyk — christina.barszczyk@mississauga.ca\nSubmit via City e-bidding system only.',
+  },{
+    id: 1741000000001,
+    name: 'AI for City Building Lab',
+    client: 'City of Vaughan',
+    status: 'RFP Review',
+    team: 'AI / ML',
+    budget: null,
+    deadline: '2026-05-19',
+    issueDate: '2025-11-18',
+    priority: 'Medium',
+    delivery: 'Product Sale / SaaS License',
+    term: 'No contract — RFEOI is market research only',
+    rfpCode: 'RFEOI25-466',
+    link: '',
+    requirements: 'City of Vaughan seeking AI solutions for planning & building application lifecycle. Key use cases: (1) Automated compliance checks for zoning & official plan, (2) Document/drawing analysis & pre-screening, (3) Workflow optimization & automated data entry, (4) GIS integration & scenario modelling, (5) Public engagement & applicant transparency tools. City processes ~164 planning apps and 2,900 building permits/year. $1.89B construction value in 2024. Multiple separate product submissions allowed per Addendum 4.',
+    notes: '⚠ THIS IS AN RFEOI (Expression of Interest) — NOT a formal RFP. No money exchanged, no contract awarded from this process. It is market research only. City may follow up with interviews, demos, or proof-of-concept pilots, and could lead to a formal RFP/RFT/RFQ later.
+
+Strategic value: Getting in early positions us for the real procurement. Multiple product submissions allowed — each solution can be submitted independently (per Addendum 4).
+
+Key dates:
+• Released: Nov 18, 2025
+• Questions deadline: May 5, 2026
+• Closing: May 19, 2026 @ 3:00 PM
+• 4 Addenda issued — review carefully
+
+Contact: Sia Xilias — sia.xilias@vaughan.ca
+Submit via: vaughan.bidsandtenders.ca',
+    approval: undefined,
+  }];
+  save();
+}
+
+render();
+</script>
+</body>
+</html>
